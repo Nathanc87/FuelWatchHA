@@ -50,6 +50,82 @@ Each entry creates a device named after the station (e.g. `Caltex Naval Base`).
 
 ---
 
+## Dashboard Card
+
+Add this to your Lovelace dashboard for a clean fuel price overview. Replace the entity IDs with your own.
+
+```yaml
+type: entities
+title: ⛽ Fuel Prices
+entities:
+  - entity: sensor.caltex_naval_base_trading_name
+    name: Station
+    icon: mdi:gas-station
+  - entity: sensor.caltex_naval_base_price_today
+    name: Today
+    icon: mdi:currency-usd
+  - entity: sensor.caltex_naval_base_price_tomorrow
+    name: Tomorrow
+    icon: mdi:calendar-today
+  - type: conditional
+    conditions:
+      - condition: template
+        value_template: >
+          {% set today = states('sensor.caltex_naval_base_price_today') | float(0) %}
+          {% set tomorrow = states('sensor.caltex_naval_base_price_tomorrow') | float(0) %}
+          {{ today > 0 and tomorrow > 0 and (tomorrow - today) >= 4 }}
+    row:
+      type: section
+      label: ⚠️ Price rising tomorrow — fill up today!
+```
+
+Or as a more visual glance card:
+
+```yaml
+type: glance
+title: ⛽ Fuel Prices
+entities:
+  - entity: sensor.caltex_naval_base_price_today
+    name: Today
+  - entity: sensor.caltex_naval_base_price_tomorrow
+    name: Tomorrow
+  - entity: sensor.caltex_naval_base_trading_name
+    name: Station
+```
+
+---
+
+## Automation — Price Spike Alert
+
+Sends a mobile notification when tomorrow's price is 4¢ or more above today's. Triggers automatically after FuelWatch publishes tomorrow's prices (~2:30 PM WA time).
+
+```yaml
+alias: FuelWatch — Price Spike Alert
+description: Alert when tomorrow's fuel price is 4c or more above today's
+triggers:
+  - trigger: template
+    value_template: >
+      {% set today = states('sensor.caltex_naval_base_price_today') | float(0) %}
+      {% set tomorrow = states('sensor.caltex_naval_base_price_tomorrow') | float(0) %}
+      {{ today > 0 and tomorrow > 0 and (tomorrow - today) >= 4 }}
+conditions: []
+actions:
+  - action: notify.mobile_app_nathansphone
+    data:
+      title: ⛽ Fuel Price Rising Tomorrow
+      message: >
+        {% set today = states('sensor.caltex_naval_base_price_today') | float %}
+        {% set tomorrow = states('sensor.caltex_naval_base_price_tomorrow') | float %}
+        {% set station = states('sensor.caltex_naval_base_trading_name') %}
+        {{ station }} — today {{ today }}¢, tomorrow {{ tomorrow }}¢
+        (+{{ (tomorrow - today) | round(1) }}¢). Fill up today!
+mode: single
+```
+
+> Replace `notify.mobile_app_nathansphone` with your own notification service. To find yours go to **Developer Tools → Actions** and search for `notify`.
+
+---
+
 ## Notes
 
 - **FuelWatch maintenance window:** The service is unavailable every Wednesday 5–10 PM WA time. Sensors will show unavailable during this window and recover automatically.
