@@ -30,7 +30,7 @@ A Home Assistant custom integration for tracking Western Australian fuel prices 
 
 1. Go to **Settings → Devices & Services → Add Integration**
 2. Search for **FuelWatch HA**
-3. Enter a **suburb** (e.g. `Secret Harbour`) and select a **fuel type**
+3. Enter a **suburb** (e.g. `Naval Base`) and select a **fuel type**
 4. A live list of stations in the area will load — select your preferred station
 5. Click submit
 
@@ -46,7 +46,7 @@ You can add multiple entries for different stations or fuel types.
 | `Price (Tomorrow)` | Tomorrow's price in cents per litre (available after ~2:30 PM WA time) |
 | `Trading Name` | Station trading name |
 
-Each entry creates a device named after the station (e.g. `Puma Secret Harbour`).
+Each entry creates a device named after the station (e.g. `Caltex Naval Base`).
 
 ---
 
