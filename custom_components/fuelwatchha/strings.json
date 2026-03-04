@@ -10,7 +10,7 @@
           "product": "Fuel Type"
         },
         "data_description": {
-          "suburb": "Western Australian suburb name (e.g. Secret Harbour, Naval Base).",
+          "suburb": "Western Australian suburb name (e.g. Naval Base, Kwinana).",
           "product": "The type of fuel you want to monitor."
         }
       },
