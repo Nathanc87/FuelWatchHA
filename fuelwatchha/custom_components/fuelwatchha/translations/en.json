@@ -1,0 +1,33 @@
+{
+  "title": "FuelWatch HA",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure FuelWatch HA",
+        "description": "Enter the suburb and fuel type to search for stations.",
+        "data": {
+          "suburb": "Suburb",
+          "product": "Fuel Type"
+        },
+        "data_description": {
+          "suburb": "Western Australian suburb name (e.g. Secret Harbour, Naval Base).",
+          "product": "The type of fuel you want to monitor."
+        }
+      },
+      "station": {
+        "title": "Select Station",
+        "description": "Found {count} stations for {product} near {suburb}. Stations are listed cheapest first with today's price. Both today and tomorrow prices will be tracked.",
+        "data": {
+          "station": "Station"
+        }
+      }
+    },
+    "error": {
+      "suburb_required": "Please enter a suburb name.",
+      "no_stations_found": "No stations found. Check the suburb spelling and that stations in the area sell this fuel type."
+    },
+    "abort": {
+      "already_configured": "This station is already configured."
+    }
+  }
+}

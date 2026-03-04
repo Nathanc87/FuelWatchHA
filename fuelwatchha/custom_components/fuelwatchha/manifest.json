@@ -1,0 +1,13 @@
+{
+  "domain": "fuelwatchha",
+  "name": "FuelWatch HA",
+  "version": "1.0.0",
+  "documentation": "https://github.com/Nathanc87/fuelwatchha",
+  "issue_tracker": "https://github.com/Nathanc87/fuelwatchha/issues",
+  "integration_type": "service",
+  "config_flow": true,
+  "dependencies": [],
+  "codeowners": ["@Nathanc87"],
+  "requirements": [],
+  "iot_class": "cloud_polling"
+}
