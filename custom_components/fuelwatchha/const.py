@@ -2,7 +2,7 @@
 
 DOMAIN = "fuelwatchha"
 
-FUELWATCH_RSS_URL = "http://www.fuelwatch.wa.gov.au/fuelwatch/fuelWatchRSS"
+FUELWATCH_RSS_URL = "https://www.fuelwatch.wa.gov.au/fuelwatch/fuelWatchRSS"
 
 FUEL_PRODUCTS: dict[int, str] = {
     1: "Unleaded (ULP)",
