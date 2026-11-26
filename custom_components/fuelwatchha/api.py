@@ -17,9 +17,9 @@ _PARSE_ERROR_LOGGED = False
 
 # XML entities that are valid without escaping. Bare ampersands in feed text
 # are common enough to repair safely before parsing.
-_INVALID_AMPERSAND = re.compile(r"&(?!amp;|lt;|gt;|quot;|apos;|#\\d+;|#x[0-9A-Fa-f]+;)")
+_INVALID_AMPERSAND = re.compile(r"&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9A-Fa-f]+;)")
 _INVALID_XML_CHAR = re.compile(
-    r"[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]"
+    r"[\x00-\x08\x0B\x0C\x0E-\x1F]"
 )
 
 # Tags present in each FuelWatch RSS <item>
