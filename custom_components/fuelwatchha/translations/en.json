@@ -4,13 +4,15 @@
     "step": {
       "user": {
         "title": "Configure FuelWatch HA",
-        "description": "Enter the suburb and fuel type to search for stations.",
+        "description": "Enter a suburb or postcode and select the fuel type. You can use either location field.",
         "data": {
           "suburb": "Suburb",
+          "postcode": "Postcode",
           "product": "Fuel Type"
         },
         "data_description": {
           "suburb": "Western Australian suburb name (e.g. Secret Harbour, Naval Base).",
+          "postcode": "Four-digit WA postcode. Postcode matching depends on postcode data supplied by the source API.",
           "product": "The type of fuel you want to monitor."
         }
       },
@@ -24,7 +26,9 @@
     },
     "error": {
       "suburb_required": "Please enter a suburb name.",
-      "no_stations_found": "No stations found. Check the suburb spelling and that stations in the area sell this fuel type."
+      "no_stations_found": "No stations found for this location and fuel type. Try entering the suburb instead.",
+      "location_required": "Enter either a suburb or a postcode.",
+      "invalid_postcode": "Enter a valid four-digit postcode."
     },
     "abort": {
       "already_configured": "This station is already configured."

@@ -24,45 +24,56 @@ from .const import CONF_POSTCODE, CONF_PRODUCT, CONF_SUBURB, DOMAIN, FUEL_PRODUC
 
 
 class FuelWatchHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Configure the cheapest station for a postcode and fuel type."""
+    """Configure the cheapest station by suburb or postcode."""
 
     VERSION = 1
-
-    def __init__(self) -> None:
-        self._postcode = ""
-        self._product = 1
-        self._station: dict[str, Any] | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Select postcode and fuel type."""
+        """Select suburb or postcode and fuel type."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            postcode = str(user_input[CONF_POSTCODE]).strip()
+            suburb = str(user_input.get(CONF_SUBURB, "")).strip()
+            postcode = str(user_input.get(CONF_POSTCODE, "")).strip()
             product = int(user_input[CONF_PRODUCT])
-            if not postcode.isdigit() or len(postcode) != 4:
+
+            if not suburb and not postcode:
+                errors["base"] = "location_required"
+            elif postcode and (not postcode.isdigit() or len(postcode) != 4):
                 errors[CONF_POSTCODE] = "invalid_postcode"
             else:
                 session: aiohttp.ClientSession = async_get_clientsession(self.hass)
-                stations = await fetch_stations(session, "", product, "today")
-                matching = [s for s in stations if str(s.get("postcode", "")).zfill(4) == postcode]
-                if not matching:
-                    errors[CONF_POSTCODE] = "no_stations_found"
-                else:
-                    self._postcode = postcode
-                    self._product = product
-                    self._station = matching[0]
-                    await self.async_set_unique_id(f"{postcode}_{product}")
+                # Prefer a suburb query when supplied. The API may omit postcode
+                # metadata for stations, so suburb mode remains a reliable option.
+                stations = await fetch_stations(
+                    session, suburb if suburb else "", product, "today"
+                )
+                if postcode and not suburb:
+                    matching = [
+                        station for station in stations
+                        if str(station.get("postcode", "")).strip() == postcode
+                    ]
+                    if not matching:
+                        errors[CONF_POSTCODE] = "no_stations_found"
+                        stations = []
+                    else:
+                        stations = matching
+
+                if stations:
+                    location_key = postcode if postcode and not suburb else suburb.lower()
+                    await self.async_set_unique_id(f"{location_key}_{product}")
                     self._abort_if_unique_id_configured()
                     return self.async_create_entry(
-                        title=f"{postcode} — {FUEL_PRODUCTS.get(product, str(product))}",
+                        title=f"{suburb or postcode} — {FUEL_PRODUCTS.get(product, str(product))}",
                         data={
-                            CONF_POSTCODE: postcode,
+                            CONF_SUBURB: suburb,
+                            CONF_POSTCODE: postcode if not suburb else "",
                             CONF_PRODUCT: str(product),
-                            CONF_SUBURB: "",
                         },
                     )
+                elif not errors:
+                    errors["base"] = "no_stations_found"
 
         product_options = [
             SelectOptionDict(value=str(k), label=v) for k, v in FUEL_PRODUCTS.items()
@@ -70,7 +81,10 @@ class FuelWatchHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_POSTCODE): TextSelector(
+                vol.Optional(CONF_SUBURB, default=""): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.TEXT)
+                ),
+                vol.Optional(CONF_POSTCODE, default=""): TextSelector(
                     TextSelectorConfig(type=TextSelectorType.TEXT)
                 ),
                 vol.Required(CONF_PRODUCT, default="1"): SelectSelector(
