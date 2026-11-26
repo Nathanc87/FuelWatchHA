@@ -4,22 +4,18 @@
 
 A Home Assistant custom integration for tracking Western Australian fuel prices from [FuelWatch](https://www.fuelwatch.wa.gov.au/) using a public JSON API.
 
----
-
 ## Features
 
-- Select your preferred station from a live dropdown during setup
-- Tracks today's and tomorrow's price for your chosen station
-- Supports ULP, PULP, Diesel, Brand Diesel, LPG, 98 RON, and E85
-- Fully async — no blocking calls, uses HA's built-in HTTP client
-- No external Python dependencies
+- Enter a four-digit postcode and fuel type
+- Automatically tracks the cheapest station in that postcode — no need to add individual stations
+- Today's and tomorrow's cheapest prices and station names
 - Hourly updates
-
----
+- Fully async and uses Home Assistant's built-in HTTP client
+- No external Python dependencies
 
 ## Data source
 
-FuelWatch HA uses the public, read-only [FuelWatch JSON API](https://docs.fuelwatch.oss.bhodges.me/), an independent API that republishes WA FuelWatch price data. No API key is required. The API provides normalized station details and prices in Australian cents per litre. It is not operated by the WA Government and availability depends on the API maintainer.
+FuelWatch HA uses the public, read-only [FuelWatch JSON API](https://docs.fuelwatch.oss.bhodges.me/), an independent API that republishes WA FuelWatch price data. No API key is required. The API does not support postcode filtering, so FuelWatch HA requests the statewide station list for the selected fuel and filters it locally by postcode. Price and station data are provided by FuelWatch; API availability depends on its maintainer.
 
 ## Installation via HACS
 
@@ -28,115 +24,32 @@ FuelWatch HA uses the public, read-only [FuelWatch JSON API](https://docs.fuelwa
 3. Search for **FuelWatch HA** and install
 4. Restart Home Assistant
 
----
-
 ## Setup
 
 1. Go to **Settings → Devices & Services → Add Integration**
 2. Search for **FuelWatch HA**
-3. Enter a **suburb** (e.g. `Naval Base`) and select a **fuel type**
-4. A live list of stations in the area will load — select your preferred station
-5. Click submit
+3. Enter your four-digit postcode (e.g. `6168`) and select the fuel type
+4. Submit. The integration creates one entry for that postcode and fuel type and automatically selects the cheapest station.
 
-You can add multiple entries for different stations or fuel types.
-
----
+You can add another postcode or fuel type if you want to track more than one.
 
 ## Sensors created per entry
 
 | Sensor | Description |
 |---|---|
-| `Price (Today)` | Today's price in cents per litre |
-| `Price (Tomorrow)` | Tomorrow's price in cents per litre (available after ~2:30 PM WA time) |
-| `Trading Name` | Station trading name |
+| `Price (Today)` | Cheapest price today in cents per litre |
+| `Price (Tomorrow)` | Cheapest price tomorrow in cents per litre (when published) |
+| `Cheapest Station` | Station currently offering the cheapest price today |
 
-Each entry creates a device named after the station (e.g. `Caltex Naval Base`).
-
----
-
-## Dashboard Card
-
-Add this to your Lovelace dashboard for a clean fuel price overview. Replace the entity IDs with your own.
-
-```yaml
-type: entities
-title: ⛽ Fuel Prices
-entities:
-  - entity: sensor.caltex_naval_base_trading_name
-    name: Station
-    icon: mdi:gas-station
-  - entity: sensor.caltex_naval_base_price_today
-    name: Today
-    icon: mdi:currency-usd
-  - entity: sensor.caltex_naval_base_price_tomorrow
-    name: Tomorrow
-    icon: mdi:calendar-today
-  - type: conditional
-    conditions:
-      - condition: template
-        value_template: >
-          {% set today = states('sensor.caltex_naval_base_price_today') | float(0) %}
-          {% set tomorrow = states('sensor.caltex_naval_base_price_tomorrow') | float(0) %}
-          {{ today > 0 and tomorrow > 0 and (tomorrow - today) >= 4 }}
-    row:
-      type: section
-      label: ⚠️ Price rising tomorrow — fill up today!
-```
-
-Or as a more visual glance card:
-
-```yaml
-type: glance
-title: ⛽ Fuel Prices
-entities:
-  - entity: sensor.caltex_naval_base_price_today
-    name: Today
-  - entity: sensor.caltex_naval_base_price_tomorrow
-    name: Tomorrow
-  - entity: sensor.caltex_naval_base_trading_name
-    name: Station
-```
-
----
-
-## Automation — Price Spike Alert
-
-Sends a mobile notification when tomorrow's price is 4¢ or more above today's. Triggers automatically after FuelWatch publishes tomorrow's prices (~2:30 PM WA time).
-
-```yaml
-alias: FuelWatch — Price Spike Alert
-description: Alert when tomorrow's fuel price is 4c or more above today's
-triggers:
-  - trigger: template
-    value_template: >
-      {% set today = states('sensor.caltex_naval_base_price_today') | float(0) %}
-      {% set tomorrow = states('sensor.caltex_naval_base_price_tomorrow') | float(0) %}
-      {{ today > 0 and tomorrow > 0 and (tomorrow - today) >= 4 }}
-conditions: []
-actions:
-  - action: notify.mobile_app_nathansphone
-    data:
-      title: ⛽ Fuel Price Rising Tomorrow
-      message: >
-        {% set today = states('sensor.caltex_naval_base_price_today') | float %}
-        {% set tomorrow = states('sensor.caltex_naval_base_price_tomorrow') | float %}
-        {% set station = states('sensor.caltex_naval_base_trading_name') %}
-        {{ station }} — today {{ today }}¢, tomorrow {{ tomorrow }}¢
-        (+{{ (tomorrow - today) | round(1) }}¢). Fill up today!
-mode: single
-```
-
-> Replace `notify.mobile_app_nathansphone` with your own notification service. To find yours go to **Developer Tools → Actions** and search for `notify`.
-
----
+Price sensors include postcode, station suburb, station name, address and price date as attributes. The cheapest station can change as prices update.
 
 ## Notes
 
-- **FuelWatch maintenance window:** The service is unavailable every Wednesday 5–10 PM WA time. Sensors will show unavailable during this window and recover automatically.
-- **Tomorrow prices:** FuelWatch publishes the next day's prices after 2:30 PM. The `Price (Tomorrow)` sensor will be unavailable until then.
-- **Brand Diesel:** Not available at all stations. If no results are returned for a suburb, try a nearby larger suburb.
-
----
+- The integration checks hourly. The API's shared source cache refreshes hourly and may be cached for up to six hours.
+- Tomorrow's prices appear after FuelWatch publishes them.
+- Prices are in Australian cents per litre.
+- The integration requests the statewide list for the chosen fuel, then filters by postcode because the API does not offer a postcode parameter.
+- Existing station-based config entries continue to use their stored station selection; new entries use postcode tracking.
 
 ## License
 

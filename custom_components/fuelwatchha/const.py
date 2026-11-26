@@ -1,7 +1,6 @@
 """Constants for FuelWatch HA."""
 
 DOMAIN = "fuelwatchha"
-
 FUELWATCH_API_URL = "https://fuelwatch.oss.bhodges.me/v1"
 
 FUEL_PRODUCTS: dict[int, str] = {
@@ -15,5 +14,6 @@ FUEL_PRODUCTS: dict[int, str] = {
 }
 
 CONF_SUBURB = "suburb"
+CONF_POSTCODE = "postcode"
 CONF_PRODUCT = "product"
 CONF_STATION_TRADING_NAME = "station_trading_name"

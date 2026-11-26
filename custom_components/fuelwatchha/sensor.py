@@ -1,14 +1,9 @@
 """Sensor platform for FuelWatch HA."""
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorStateClass,
-)
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_CENT
 from homeassistant.core import HomeAssistant
@@ -16,10 +11,8 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_STATION_TRADING_NAME, DOMAIN, FUEL_PRODUCTS
+from .const import CONF_POSTCODE, DOMAIN, FUEL_PRODUCTS
 from .coordinator import FuelWatchCoordinator
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -29,27 +22,27 @@ async def async_setup_entry(
 ) -> None:
     """Set up FuelWatch HA sensors."""
     coordinator: FuelWatchCoordinator = hass.data[DOMAIN][entry.entry_id]
-
-    async_add_entities(
-        [
-            FuelPriceSensor(coordinator, entry, "today"),
-            FuelPriceSensor(coordinator, entry, "tomorrow"),
-            FuelTradingNameSensor(coordinator, entry),
-        ]
-    )
+    async_add_entities([
+        FuelPriceSensor(coordinator, entry, "today"),
+        FuelPriceSensor(coordinator, entry, "tomorrow"),
+        FuelTradingNameSensor(coordinator, entry),
+    ])
 
 
 def _make_device_info(entry: ConfigEntry) -> DeviceInfo:
     """Build shared DeviceInfo for all sensors in an entry."""
-    trading_name: str = entry.data.get(CONF_STATION_TRADING_NAME, "")
+    trading_name = entry.data.get("station_trading_name", "")
     product = int(entry.data.get("product", 1))
-    suburb: str = entry.data.get("suburb", "")
+    postcode = entry.data.get(CONF_POSTCODE, "")
+    suburb = entry.data.get("suburb", "")
     product_label = FUEL_PRODUCTS.get(product, str(product))
-
+    name = f"FuelWatch {postcode} — {product_label}" if postcode else (
+        trading_name or f"FuelWatch {suburb.title()} — {product_label}"
+    )
     return DeviceInfo(
         entry_type=DeviceEntryType.SERVICE,
         identifiers={(DOMAIN, entry.entry_id)},
-        name=trading_name if trading_name else f"FuelWatch {suburb.title()} — {product_label}",
+        name=name,
         manufacturer="FuelWatch WA",
         model=product_label,
         configuration_url="https://www.fuelwatch.wa.gov.au",
@@ -58,16 +51,9 @@ def _make_device_info(entry: ConfigEntry) -> DeviceInfo:
 
 class FuelWatchBaseSensor(CoordinatorEntity[FuelWatchCoordinator], SensorEntity):
     """Base sensor class."""
-
     _attr_has_entity_name = True
 
-    def __init__(
-        self,
-        coordinator: FuelWatchCoordinator,
-        entry: ConfigEntry,
-        name: str,
-        unique_suffix: str,
-    ) -> None:
+    def __init__(self, coordinator: FuelWatchCoordinator, entry: ConfigEntry, name: str, unique_suffix: str) -> None:
         super().__init__(coordinator)
         self._attr_name = name
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_{unique_suffix}"
@@ -84,23 +70,12 @@ class FuelWatchBaseSensor(CoordinatorEntity[FuelWatchCoordinator], SensorEntity)
 
 class FuelPriceSensor(FuelWatchBaseSensor):
     """Price sensor for today or tomorrow."""
-
     _attr_native_unit_of_measurement = CURRENCY_CENT
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
 
-    def __init__(
-        self,
-        coordinator: FuelWatchCoordinator,
-        entry: ConfigEntry,
-        day: str,
-    ) -> None:
-        super().__init__(
-            coordinator,
-            entry,
-            name=f"Price ({day.capitalize()})",
-            unique_suffix=f"price_{day}",
-        )
+    def __init__(self, coordinator: FuelWatchCoordinator, entry: ConfigEntry, day: str) -> None:
+        super().__init__(coordinator, entry, f"Price ({day.capitalize()})", f"price_{day}")
         self._day = day
 
     def _get_value(self) -> float | None:
@@ -120,7 +95,8 @@ class FuelPriceSensor(FuelWatchBaseSensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         station = (self.coordinator.data or {}).get(self._day) or {}
         return {
-            "suburb": self.coordinator.suburb,
+            "postcode": self.coordinator.postcode or station.get("postcode"),
+            "suburb": station.get("location") or self.coordinator.suburb,
             "fuel_type": FUEL_PRODUCTS.get(self.coordinator.product, str(self.coordinator.product)),
             "day": self._day,
             "station": station.get("trading-name"),
@@ -130,19 +106,9 @@ class FuelPriceSensor(FuelWatchBaseSensor):
 
 
 class FuelTradingNameSensor(FuelWatchBaseSensor):
-    """Trading name sensor — always reads from today's data."""
-
-    def __init__(
-        self,
-        coordinator: FuelWatchCoordinator,
-        entry: ConfigEntry,
-    ) -> None:
-        super().__init__(
-            coordinator,
-            entry,
-            name="Trading Name",
-            unique_suffix="trading_name",
-        )
+    """Trading name of the cheapest station today."""
+    def __init__(self, coordinator: FuelWatchCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "Cheapest Station", "trading_name")
 
     def _get_value(self) -> str | None:
         station = (self.coordinator.data or {}).get("today")
