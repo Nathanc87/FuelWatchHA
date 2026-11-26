@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
-A Home Assistant custom integration for tracking Western Australian fuel prices via [FuelWatch](https://www.fuelwatch.wa.gov.au/).
+A Home Assistant custom integration for tracking Western Australian fuel prices from [FuelWatch](https://www.fuelwatch.wa.gov.au/) using a public JSON API.
 
 ---
 
@@ -16,6 +16,10 @@ A Home Assistant custom integration for tracking Western Australian fuel prices 
 - Hourly updates
 
 ---
+
+## Data source
+
+FuelWatch HA uses the public, read-only [FuelWatch JSON API](https://docs.fuelwatch.oss.bhodges.me/), an independent API that republishes WA FuelWatch price data. No API key is required. The API provides normalized station details and prices in Australian cents per litre. It is not operated by the WA Government and availability depends on the API maintainer.
 
 ## Installation via HACS
 

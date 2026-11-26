@@ -1,40 +1,18 @@
-"""FuelWatch RSS API client."""
+"""FuelWatch JSON API client."""
 from __future__ import annotations
 
+import json
 import logging
-import re
-import xml.etree.ElementTree as ET
 from typing import Any
 
 import aiohttp
 
-from .const import FUELWATCH_RSS_URL
+from .const import FUELWATCH_API_URL
 
 _LOGGER = logging.getLogger(__name__)
 
-# Avoid repeating the same feed parse warning on every coordinator refresh.
-_PARSE_ERROR_LOGGED = False
-
-# XML entities that are valid without escaping. Bare ampersands in feed text
-# are common enough to repair safely before parsing.
-_INVALID_AMPERSAND = re.compile(r"&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9A-Fa-f]+;)")
-_INVALID_XML_CHAR = re.compile(
-    r"[\x00-\x08\x0B\x0C\x0E-\x1F]"
-)
-
-# Tags present in each FuelWatch RSS <item>
-_ITEM_TAGS = (
-    "brand",
-    "date",
-    "price",
-    "trading-name",
-    "location",
-    "address",
-    "phone",
-    "latitude",
-    "longitude",
-    "site-features",
-)
+# Avoid repeating identical API errors on every coordinator refresh.
+_API_ERROR_LOGGED = False
 
 
 async def fetch_stations(
@@ -43,84 +21,117 @@ async def fetch_stations(
     product: int,
     day: str = "today",
 ) -> list[dict[str, Any]]:
-    """Fetch stations from FuelWatch RSS feed.
+    """Fetch and normalize station prices from the public FuelWatch JSON API.
 
-    Returns a list of station dicts sorted cheapest first,
-    or an empty list if the feed returns no results or an error occurs.
+    The API returns JSON:API station resources. Normalize them to the legacy
+    internal keys so existing config entries and sensor entities remain valid.
     """
-    params: dict[str, Any] = {
-        "Product": product,
-        "Suburb": suburb,
-        "Day": day,
+    global _API_ERROR_LOGGED
+
+    params = {
+        "product": str(product),
+        "suburb": suburb,
+        "day": day,
     }
+    headers = {"Accept": "application/vnd.api+json"}
 
     try:
         async with session.get(
-            FUELWATCH_RSS_URL,
+            FUELWATCH_API_URL,
             params=params,
-            timeout=aiohttp.ClientTimeout(total=20),
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=25),
         ) as response:
             response.raise_for_status()
-            content = await response.text(encoding="utf-8", errors="replace")
+            body = await response.text(encoding="utf-8", errors="replace")
     except aiohttp.ClientResponseError as err:
-        _LOGGER.error(
-            "FuelWatch HA: HTTP %s fetching %s %s (%s)",
-            err.status, suburb, product, day,
-        )
+        if not _API_ERROR_LOGGED:
+            _LOGGER.warning(
+                "FuelWatch HA: JSON API returned HTTP %s for %s, product %s (%s)",
+                err.status, suburb, product, day,
+            )
+            _API_ERROR_LOGGED = True
         return []
-    except aiohttp.ClientError as err:
-        _LOGGER.error(
-            "FuelWatch HA: connection error fetching %s %s (%s): %s",
-            suburb, product, day, err,
-        )
+    except (aiohttp.ClientError, TimeoutError) as err:
+        if not _API_ERROR_LOGGED:
+            _LOGGER.warning(
+                "FuelWatch HA: connection error querying %s, product %s (%s): %s",
+                suburb, product, day, err,
+            )
+            _API_ERROR_LOGGED = True
         return []
-
-    return _parse_rss(content)
-
-
-def _parse_rss(xml_text: str) -> list[dict[str, Any]]:
-    """Parse FuelWatch RSS XML and return list of station dicts."""
-    global _PARSE_ERROR_LOGGED
 
     try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError:
-        # Some feed entries contain bare '&' characters, which are not valid
-        # XML. Escape only ampersands that do not begin a valid entity.
-        repaired = _INVALID_XML_CHAR.sub("", xml_text)
-        repaired = _INVALID_AMPERSAND.sub("&amp;", repaired)
-        try:
-            root = ET.fromstring(repaired)
-        except ET.ParseError as err:
-            if not _PARSE_ERROR_LOGGED:
-                _LOGGER.warning(
-                    "FuelWatch HA: RSS response was not valid XML; "
-                    "skipping this update (%s)",
-                    err,
-                )
-                _PARSE_ERROR_LOGGED = True
-            return []
+        payload = json.loads(body)
+    except json.JSONDecodeError as err:
+        if not _API_ERROR_LOGGED:
+            _LOGGER.warning(
+                "FuelWatch HA: JSON API returned an invalid JSON response (%s)",
+                err,
+            )
+            _API_ERROR_LOGGED = True
+        return []
 
-    _PARSE_ERROR_LOGGED = False
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+        if not _API_ERROR_LOGGED:
+            _LOGGER.warning(
+                "FuelWatch HA: JSON API response did not contain a station data list"
+            )
+            _API_ERROR_LOGGED = True
+        return []
+
+    _API_ERROR_LOGGED = False
+    meta = payload.get("meta") or {}
+    source_date = meta.get("sourceDate")
+
     stations: list[dict[str, Any]] = []
+    for resource in payload["data"]:
+        if not isinstance(resource, dict):
+            continue
+        attributes = resource.get("attributes") or {}
+        price_info = attributes.get("price") or {}
+        products = price_info.get("products") or {}
+        price_value = products.get(str(product), products.get(product))
 
-    for item in root.iter("item"):
-        station: dict[str, Any] = {}
+        # Some API expansions return a price object; the default response
+        # returns a numeric cents-per-litre value.
+        if isinstance(price_value, dict):
+            price_value = price_value.get("amount")
 
-        for tag in _ITEM_TAGS:
-            el = item.find(tag)
-            if el is not None and el.text:
-                station[tag] = el.text.strip()
+        try:
+            price = float(price_value)
+        except (TypeError, ValueError):
+            # A station that does not sell this product is not a zero-price
+            # station and should not be added to the result.
+            continue
 
-        # Skip incomplete entries (must have at least a price and trading name)
-        if "price" in station and "trading-name" in station:
-            try:
-                station["price"] = float(station["price"])
-            except (ValueError, TypeError):
-                pass
-            stations.append(station)
+        address_info = attributes.get("address") or {}
+        street = address_info.get("street") or ""
+        station_suburb = address_info.get("suburb") or suburb
+        state = address_info.get("state") or "WA"
+        postcode = address_info.get("postcode") or ""
+        address_parts = [part for part in (street, station_suburb, state, postcode) if part]
+        address = ", ".join(address_parts)
 
-    # Already sorted cheapest first by FuelWatch, but enforce it defensively
-    stations.sort(key=lambda s: float(s.get("price", 9999)))
+        brand = attributes.get("brand")
+        if isinstance(brand, dict):
+            brand = brand.get("name") or brand.get("code")
 
+        stations.append(
+            {
+                "trading-name": attributes.get("tradingName") or attributes.get("name") or "Unknown",
+                "brand": brand,
+                "price": price,
+                "date": price_info.get("asAt") or source_date,
+                "location": station_suburb,
+                "address": address,
+                "postcode": str(postcode) if postcode else "",
+                "phone": attributes.get("phone"),
+                "latitude": attributes.get("latitude"),
+                "longitude": attributes.get("longitude"),
+                "site-features": attributes.get("siteFeatures"),
+            }
+        )
+
+    stations.sort(key=lambda station: station["price"])
     return stations
